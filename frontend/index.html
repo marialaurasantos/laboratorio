@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+
+    <title>Upload Caso 3</title>
+
+    <style>
+        body {
+            max-width: 700px;
+            margin: 50px auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        main {
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 24px;
+        }
+
+        button {
+            margin-top: 20px;
+            padding: 10px 18px;
+            cursor: pointer;
+        }
+
+        pre {
+            margin-top: 20px;
+            padding: 15px;
+            background: #eee;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+
+<main>
+
+    <h1>Upload direto para o RustFS</h1>
+
+    <p>
+        Selecione PNG, JPEG ou PDF.
+    </p>
+
+    <input
+        id="arquivo"
+        type="file"
+        accept=".png,.jpg,.jpeg,.pdf"
+    >
+
+    <br>
+
+    <button id="enviar">
+        Enviar
+    </button>
+
+    <pre id="status">
+Aguardando arquivo.
+    </pre>
+
+</main>
+
+<script>
+
+const arquivoInput =
+    document.querySelector("#arquivo");
+
+const botao =
+    document.querySelector("#enviar");
+
+const status =
+    document.querySelector("#status");
+
+
+function mostrar(texto) {
+    status.textContent = texto;
+}
+
+
+function descobrirTipo(file) {
+
+    if (file.type) {
+        return file.type;
+    }
+
+    const nome =
+        file.name.toLowerCase();
+
+    if (nome.endsWith(".png")) {
+        return "image/png";
+    }
+
+    if (
+        nome.endsWith(".jpg") ||
+        nome.endsWith(".jpeg")
+    ) {
+        return "image/jpeg";
+    }
+
+    if (nome.endsWith(".pdf")) {
+        return "application/pdf";
+    }
+
+    return "application/octet-stream";
+}
+
+
+botao.addEventListener(
+    "click",
+    async () => {
+
+        const file =
+            arquivoInput.files[0];
+
+        if (!file) {
+            mostrar(
+                "Selecione um arquivo."
+            );
+            return;
+        }
+
+        const contentType =
+            descobrirTipo(file);
+
+        try {
+
+            mostrar(
+                "1/3 Gerando URL assinada..."
+            );
+
+            const gerar =
+                await fetch(
+                    "/caso3/gerar-link",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+                            nome: file.name,
+                            content_type:
+                                contentType,
+                            expira_em_segundos:
+                                300
+                        })
+                    }
+                );
+
+            const dados =
+                await gerar.json();
+
+            if (!gerar.ok) {
+                throw new Error(
+                    dados.detail ||
+                    "Erro ao gerar URL"
+                );
+            }
+
+
+            mostrar(
+                "2/3 Enviando para o RustFS..."
+            );
+
+            const upload =
+                await fetch(
+                    dados.url_upload,
+                    {
+                        method: "PUT",
+
+                        headers: {
+                            "Content-Type":
+                                contentType
+                        },
+
+                        body: file
+                    }
+                );
+
+            if (!upload.ok) {
+                throw new Error(
+                    `RustFS retornou ${upload.status}`
+                );
+            }
+
+
+            mostrar(
+                "3/3 Confirmando upload..."
+            );
+
+            const confirmar =
+                await fetch(
+                    `/caso3/confirmar/${dados.id}`,
+                    {
+                        method: "POST"
+                    }
+                );
+
+            const resultado =
+                await confirmar.json();
+
+            if (!confirmar.ok) {
+                throw new Error(
+                    resultado.detail ||
+                    `HTTP ${confirmar.status}`
+                );
+            }
+
+
+            mostrar(
+                `Upload concluído!
+
+ID: ${resultado.id}
+Status: ${resultado.status}
+Tamanho: ${resultado.tamanho} bytes`
+            );
+
+        }
+
+        catch (erro) {
+
+            mostrar(
+                `Erro: ${erro.message}`
+            );
+
+        }
+
+    }
+);
+
+</script>
+
+</body>
+</html>
